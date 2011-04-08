@@ -1,8 +1,13 @@
-<h2>Data</h2>
-<ul>
-<% @data.each do |data| %>
-	<li>
-		<p><%= data %></p>
-	</li>
+<% if data = redis_value(@key, 0, -1) %>
+
+	<h2>"<%= @key %>" Data</h2>
+	
+	<ul>
+	<% data.each do |val| %>
+		<li>
+			<p><%= val %></p>
+		</li>
+	<% end %>
+	</ul>
+
 <% end %>
-</ul>

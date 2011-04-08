@@ -1,49 +1,98 @@
+require 'rubygems'
+require 'sinatra/base'
+require 'redis'
+require 'json'
+
 module RedisUI
-  require 'rubygems'
-  require 'sinatra/base'
-  require 'redis'
-  require 'json'
   
   def self.redis
     Redis.new
   end
   
   class Server < Sinatra::Base
-
+        
+    before do
+      #content_type :json if request.xhr?
+    end
+    
     configure do
       set :views, File.dirname(__FILE__) + '/views'
-      set :redis, Redis.new('/tmp/redis.sock')
-      set :public, File.dirname(__FILE__) + '/static'
+      set :redis, RedisUI.redis
+      set :public, File.dirname(__FILE__) + '/public'
+      mime_type :json, "application/json"
     end  
       
     helpers do 
-      # helpers go here
+      include Rack::Utils
+      alias_method :h, :escape_html
+      
+      def redis
+        RedisUI.redis
+      end
+      
+      def redis_value(key, cursor = 0, per = 100)
+        case RedisUI.redis.type(key)
+        when 'string'
+          [RedisUI.redis.get(key)]
+        when 'list'
+          RedisUI.redis.lrange(key, cursor, cursor + per)
+        when 'set'
+          RedisUI.redis.smembers(key)[cursor..(cursor + per)]
+        when 'zset'
+          RedisUI.redis.zrange(key, cursor, cursor + per)
+        end
+      end
+      
+      def redis_size(key)
+        case RedisUI.redis.type(key)
+        when 'string'
+          RedisUI.redis.get(key).length
+        when 'list'
+          RedisUI.redis.llen(key)
+        when 'set'
+          RedisUI.redis.scard(key)
+        when 'zset'
+          RedisUI.redis.zcard(key)
+        end
+      end
+      
     end
     
+    # render view based on page name
+    # on redis error show error template w/ no layout
+    def show(page, layout = true)
+      begin
+        erb page.to_sym, {:layout => layout}
+      rescue Errno::ECONNREFUSED
+        erb :error, {:layout => false}, :error => "Redis?"
+      end
+    end
     
+    def respond_with(data = [], template = :index)
+      #if request.xhr?
+      #  data.to_json
+      #else
+        erb template, {:layout => true}
+      #end
+    end
+    
+    # index
     get "/" do
-      @keys = RedisUI.redis.keys
-      #@keys.to_json
-      erb :index
+      match = params[:match] || '*'
+      @keys = RedisUI.redis.keys(match)
+      respond_with @keys, :index
     end
     
-    get "/index" do
-      "Welcome"
-    end
-
+    # show
     get "/:key" do
       @key = params[:key]
-      @data = case RedisUI.redis.type(@key)
-      when "string"
-        Array(RedisUI.redis[@key])
-      when "list"
-        RedisUI.redis.lrange(@key, 0, -1)
-      when "set"
-        RedisUI.redis.set_members(@key)
-      else
-        []
-      end
-      erb :show
+      respond_with @key, :show
+    end
+    
+    # set
+    post "/:key" do
+      body = params[:body] || ""
+      RedisUI.redis.set params[:key], body
     end
 
   end

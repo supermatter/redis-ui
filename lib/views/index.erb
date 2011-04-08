@@ -1,8 +1,17 @@
-<h2>Keys</h2>
-<ul>
-<% @keys.each do |key| %>
-     <li>
-       <a href="/<%= key %>" %><%= key %></a>
-  </li>
+<% if @keys %>
+
+	<h4>
+		Showing all Keys
+		<em>(<%= redis.dbsize %>)</em>
+	</h4>
+  
+	<ul>
+		<% for key in @keys %>
+		<li>
+			<a href="/<%= key %>"><%= key %></a>
+			<em><%= redis.type(key) %></em>
+		</li> 
+		<% end %>
+	</ul>
+
 <% end %>
-</ul>
